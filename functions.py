@@ -1,3 +1,4 @@
+import concurrent.futures
 from scipy.spatial.distance import cdist
 import numpy as np
 import os
@@ -74,18 +75,23 @@ def match_features(descriptors_list):
     return matches_list
 
 
-def match_features_sift(descriptors_list):
+def compute_matches_for_i(args):
+    i, descriptors_list, num_images = args
     bf = cv2.BFMatcher(cv2.NORM_L2, crossCheck=True)
-    matches_list = []
+    matches = []
+    for j in range(num_images):
+        if i != j:
+            matches_ij = bf.match(descriptors_list[i], descriptors_list[j])
+            matches_ij = sorted(matches_ij, key=lambda x: x.distance)
+            matches.append((j, matches_ij))
+    return matches
+
+
+def match_features_sift(descriptors_list):
     num_images = len(descriptors_list)
-    for i in range(num_images):
-        matches = []
-        for j in range(num_images):
-            if i != j:
-                matches_ij = bf.match(descriptors_list[i], descriptors_list[j])
-                matches_ij = sorted(matches_ij, key=lambda x: x.distance)
-                matches.append((j, matches_ij))
-        matches_list.append(matches)
+    args_list = [(i, descriptors_list, num_images) for i in range(num_images)]
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        matches_list = list(executor.map(compute_matches_for_i, args_list))
     return matches_list
 
 
